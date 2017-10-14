@@ -1,0 +1,5 @@
+{
+    "Admins"     : 1,
+    "Moderators" : 2,
+    "@everyone"  : 3
+}
