@@ -1,5 +1,10 @@
 {
     "help"   : 3,
     "helpall": 3,
-    "ping"   : 2
+    "ping"   : 2,
+    "generateinvite" : 3,
+    "joinvoice" : 3,
+    "leavevoice" : 3,
+    "playmusic" : 3,
+    "stopmusic" : 3
 }

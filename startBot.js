@@ -1,5 +1,9 @@
 /* 
 discord.js node-opus --save
+npm install --save ffmpeg-binaries
+npm install --global --production windows-build-tools
+npm install node-opus (execute in bot directory)
+npm install ytdl-core
 ============================
 startBot.js
 - initialize discord client
@@ -9,7 +13,10 @@ requires:
 - discord.js
 - config.json
 - groups.json
+- paths.json
 - commandPermissions.json
+- fs
+- ytdl-core
 ============================
 */
 
@@ -19,7 +26,15 @@ const client = new Discord.Client();
 //JSON
 const config = require("./config.json");
 const groups = require("./groups.json");
+const paths = require("./paths.json");
 const commandPermissions = require("./commandPermissions.json");
+//filesystem
+const fs = require('fs');
+//youtube videos
+const ytdl = require('ytdl-core');
+
+//dispatchers required for voice
+var dispatchers = [];
 
 /*ready event*/
 client.on('ready', () => {
@@ -28,12 +43,9 @@ client.on('ready', () => {
   console.log('Connected to:');
   
   //print guilds (servers)
-  var guilds = client.guilds.array()
-  for (var guildId in guilds) {
-    if (guilds.hasOwnProperty(guildId)) {
-      console.log(guilds[guildId].name);
-    }
-  }
+  client.guilds.forEach(function(value, key) {
+    console.log(value.name)
+  });
   console.log('-------------');
 });
 
@@ -84,7 +96,7 @@ client.on("guildDelete", guild => {
 });
 
 client.on('guildMemberAdd', member => {
-  console.log('guild member added');
+  member.send(`Welcome to ${member.guild}, ${member}`);
 });
 
 client.on('guildMemberAvailable', member => {
@@ -101,6 +113,14 @@ client.on('guildMembersChunk', (members, guild) => {
 
 client.on('guildMemberSpeaking', (member, speaking) => {
   console.log('guild member speaking');
+  if (member.guild.id in dispatchers) {
+    if (speaking) {
+      //dispatchers[member.guild.id].setVolume(0.5);
+    }
+    else {
+      //dispatchers[member.guild.id].setVolume(1);
+    }
+  }
 });
 
 client.on('guildMemberUpdate', (oldMember, newMember) => {
@@ -154,7 +174,7 @@ debug event
 ============================
 */
 client.on('debug', info => {
-  console.log('debugging');
+  //console.log('debugging');
 });
 
 /*
@@ -277,13 +297,52 @@ function helpForGroup(groupName) {
       output += getHelpString(command);
     }
   }
-
-  output += `\n`
-
   if (output) {
-    return output;
+    return output + '\n';
   } else {
     return output + `${groupName} may not execute any commands.`
+  }
+}
+
+//used by .playmusic
+function playMusic(guildId, args) {
+  if (args.length) {
+    const streamOptions = { seek: 0, volume: 1 };
+    const stream = ytdl(args[0], { filter : 'audioonly' });
+    const dispatcher = client.guilds.get(guildId).voiceConnection.playStream(stream, streamOptions);
+    dispatchers[guildId] = dispatcher;
+  } else {
+    //get files from directory specified in paths.json
+    var files = fs.readdirSync(paths["music"]).filter((n) => n.endsWith(".mp3"));
+    createDispatcher(files, guildId);
+  }
+}
+
+//used by playMusic
+function createDispatcher(musicFiles, guildId) {
+  //all files played, refresh files
+  if (musicFiles.length == 0) {
+    musicFiles = fs.readdirSync(paths["music"]).filter((n) => n.endsWith(".mp3"));
+  }
+  var rnd = Math.floor(Math.random() * musicFiles.length); //random start file
+  if (musicFiles.length) {
+    var dispatcher = client.guilds.get(guildId).voiceConnection.playFile(paths["music"] + musicFiles[rnd]);
+    musicFiles.splice(rnd, 1); //remove current file  
+
+    dispatcher.on("start", () => {
+      console.log("started")
+    });
+    dispatcher.on("end", reason => {
+      console.log(reason);
+      if (reason == "stream") { //file done playing
+        createDispatcher(musicFiles, guildId);
+      }
+      else if (reason == "stopMusic") { //.stopmusic
+         return
+      } else { 
+      }
+    });
+    dispatchers[guildId] = dispatcher;
   }
 }
 
@@ -294,6 +353,11 @@ commands
 */
 
 var commands = {
+  /*
+  ============================
+  help
+  ============================
+  */
   "help": {
     usage: config.prefix + "help",
     description: "lists every command you may execute and its usage.",
@@ -346,6 +410,123 @@ var commands = {
       .then(sentMessage => sentMessage.edit(`Pong! Latency is ${sentMessage.createdTimestamp - sentMessage.createdTimestamp}ms. API Latency is ${Math.round(client.ping)}ms`))
       .catch(console.error);
     }
+  },
+  "generateinvite": {
+    usage: config.prefix + "generateinvite",
+    description: "Generates an invitelink for the bot.",
+    permissionlevel: commandPermissions["generateinvite"],
+    minimumArgLength: 0,
+    process: 
+    function(message, args) {
+      client.generateInvite(['SEND_MESSAGES', 'MANAGE_GUILD', 'MENTION_EVERYONE']) //permissions the bot requires on a server
+      .then(link => {
+        message.channel.send(`Generated bot invite link: ${link}`);
+      });
+    }
+  },
+  /*
+  ============================
+  voice
+  ============================
+  */
+  "joinvoice": {
+    usage: config.prefix + "joinvoice",
+    description: "Makes bot join your voice channel.",
+    permissionlevel: commandPermissions["joinvoice"],
+    minimumArgLength: 0,
+    process: 
+    function(message, args) {
+      //check if bot is already connected on server
+      if (message.guild.voiceConnection)
+      {
+        message.channel.send(`Already connected to ${message.guild.voiceConnection.channel}.`);
+      } else if (message.member.voiceChannel) //message.author connected
+      {
+        message.member.voiceChannel.join();
+        message.channel.send(`Connected to ${message.member.voiceChannel}.`);
+      } else { //message.author not connected 
+        message.reply("You are not connected to any voice channel.");
+      }
+    }
+  },
+  "leavevoice": {
+    usage: config.prefix + "leavevoice",
+    description: "Makes bot leave your voice channel.",
+    permissionlevel: commandPermissions["leavevoice"],
+    minimumArgLength: 0,
+    process: 
+    function(message, args) {
+      if (!message.member.voiceChannel) {
+        message.reply("You are not connected to any voice channel.");
+      } else {
+        var channel;
+
+        //check if bot and user are in the same channel
+        client.voiceConnections.forEach(function (channelId, voiceConnection) {
+          if (channelId.channel == message.member.voiceChannel) {
+            channel = channelId.channel;
+          }
+        });
+
+        //bot is in message.member.voicechannel
+        if (channel) {
+          channel.leave();
+          message.channel.send(`Disconned from ${channel}.`);
+        } else {
+          message.reply("Bot is not connected to your voice channel.");
+        }
+      }
+    }
+  },
+  "playmusic": {
+    usage: config.prefix + "playmusic <link>",
+    description: "Makes bot play music (mp3 files in music folder) <link>.",
+    permissionlevel: commandPermissions["playmusic"],
+    minimumArgLength: 0,
+    process: 
+    function(message, args) {
+      if (message.guild.voiceConnection) { //bot connected to a voice channel
+        if (message.member.voiceChannel) { //message.author connected to a voice channel
+          if (message.member.voiceChannel == message.guild.voiceConnection.channel) { //bot and message.author in the same channel
+            message.channel.send(`Playing music in ${message.member.voiceChannel}.`);
+            playMusic(message.guild.id, args);
+          } else {
+            message.reply("You are not connected to the same voice channel as the bot.");
+          }
+        } else {
+          message.reply("You are not connected to any voice channel.");
+        }
+      } else { //message.author not connected 
+        message.reply("Bot is not connected to any voice channel.");
+      }
+    }
+  },
+  "stopmusic": {
+    usage: config.prefix + "stopmusic",
+    description: "Makes bot stop playing music.",
+    permissionlevel: commandPermissions["stopmusic"],
+    minimumArgLength: 0,
+    process: 
+    function(message, args) {
+      if (message.guild.voiceConnection) { //bot connected to a voice channel
+        if (message.member.voiceChannel) { //message.author connected to a voice channel
+          if (message.member.voiceChannel == message.guild.voiceConnection.channel) { //bot and message.author in the same channel
+            if (message.guild.id in dispatchers) {
+              dispatchers[message.guild.id].end("stopMusic");
+              message.channel.send(`Stopped playing music in ${message.member.voiceChannel}.`);
+            } else {
+              message.channel.send(`Bot is not playing music.`);
+            }
+          } else {
+            message.reply("You are not connected to the same voice channel as the bot.");
+          }
+        } else {
+          message.reply("You are not connected to any voice channel.");
+        }
+      } else { //message.author not connected 
+        message.reply("Bot is not connected to any voice channel.");
+      }
+    }
   }
 };
 
@@ -365,7 +546,7 @@ function handleMessage(message) {
     //split command and arguments
     const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
     const command = args.shift().toLowerCase();
-  
+
     if (command in commands) {
       //at least one group with enough permissions
       if (checkPermissions(message.member.roles, command)) {
@@ -396,7 +577,6 @@ client.on('messageUpdate', (oldMessage, newMessage) => {
   handleMessage(newMessage);
 });
 
-
 client.on('messageDelete', message => {
   console.log('message deleted');
 });
@@ -422,5 +602,4 @@ client.on('messageReactionRemoveAll', message => {
   console.log('message reaction removed all');
 });
 
- 
 client.login(config.token);
