@@ -20,6 +20,7 @@ requires:
 ============================
 */
 
+//#region requirements
 //modules
 const Discord = require('discord.js');
 const client = new Discord.Client();
@@ -35,7 +36,10 @@ const ytdl = require('ytdl-core');
 
 //dispatchers required for voice
 var dispatchers = [];
+//#endregion requirements
 
+//#region events
+//#region readyEvent
 /*ready event*/
 client.on('ready', () => {
   client.user.setGame('.help');
@@ -48,7 +52,9 @@ client.on('ready', () => {
   });
   console.log('-------------');
 });
+//#endregion readyEvent
 
+//#region channelEvents
 /*
 ============================
 channel events
@@ -69,7 +75,9 @@ client.on('channelPinsUpdate', (channel, time) => {
 client.on('channelUpdate', (oldChannel, newChannel) => {
   console.log('channel updated');
 });
+//#endregion channelEvents
 
+//#region guildEvents
 /*
 ============================
 guild update events
@@ -138,7 +146,9 @@ client.on('guildUpdate', (oldGuild, newGuild) => {
 client.on('presenceUpdate', (oldMember, newMember) => {
   console.log('presence updated');
 });
+//#endregion guildEvents
 
+//#region roleEvents
 /*
 ============================
 role events
@@ -154,7 +164,9 @@ client.on('roleDelete', role => {
 client.on('roleUpdate', role => {
   console.log('role updated');
 });
+//#endregion roleEvents
 
+//#region clientUserUpdateEvents
 /*
 ============================
 client user update events
@@ -167,7 +179,9 @@ client.on('clientUserGuildSettingsUpdate', clientUserGuildSettings => {
 client.on('clientUserSettingsUpdate', clientUserSettings => {
   console.log('client user settings updated');
 });
+//#endregion clientUserUpdateEvents
 
+//#region debugEvent
 /*
 ============================
 debug event
@@ -176,7 +190,9 @@ debug event
 client.on('debug', info => {
   //console.log('debugging');
 });
+//#endregion debugEvent
 
+//#region connectionEvents
 /*
 ============================
 connection events
@@ -193,7 +209,9 @@ client.on('resume', replayed => {
 client.on('disconnect', event => {
   console.log('disconnected');
 });
+//#endregion connectionEvents
 
+//#region emojiEvents
 /*
 ============================
 emoji events
@@ -210,7 +228,9 @@ client.on('emojiDelete', emoji => {
 client.on('emojiUpdate', (oldEmoji, newEmoji) => {
   console.log('emoji updated');
 });
+//#endregion emojiEvents
 
+//#region errorWarningEvent
 /*
 ============================
 error/warning event
@@ -223,7 +243,9 @@ client.on('error', error => {
 client.on('warn', () => {
   console.log('warned');
 });
+//#endregion errorWarningEvent
 
+//#region userUpdateEvents
 /*
 ============================
 user update events
@@ -240,7 +262,9 @@ client.on('userUpdate', (oldUser, newUser) => {
 client.on('voiceStateUpdate', (oldMember, newMember) => {
   console.log('voice state updated');
 });
+//endregion userUpdateEvents
 
+//#region typeEvents
 /*
 ============================
 type events
@@ -253,7 +277,53 @@ client.on('typingStart', (channel, user) => {
 client.on('typingStop', (channel, user) => {
   console.log('typing stopped');
 });
+//#endregion typeEvents
 
+//#region messageEvents
+/*
+============================
+message events
+============================
+*/
+
+client.on('message', message  => {
+  handleMessage(message);
+});
+
+client.on('messageUpdate', (oldMessage, newMessage) => {
+  handleMessage(newMessage);
+});
+
+client.on('messageDelete', message => {
+  console.log('message deleted');
+});
+
+client.on('messageDeleteBulk', messages => {
+  console.log('message deleted bulk');
+});
+//#endregion messageEvents
+
+//#region reactionEvents
+/*
+============================
+reaction events
+============================
+*/
+client.on('messageReactionAdd', (messageReaction, user) => {
+  console.log('message reaction added');
+});
+
+client.on('messageReactionRemove', (messageReaction, user) => {
+  console.log('message reaction removed');
+});
+
+client.on('messageReactionRemoveAll', message => {
+  console.log('message reaction removed all');
+});
+//#endregion reactionEvents
+//#endregion events
+
+//#region helpFunctions
 /*
 ============================
 strings
@@ -306,20 +376,64 @@ function helpForGroup(groupName) {
 
 //used by .playmusic
 function playMusic(guildId, args) {
-  if (args.length) {
-    const streamOptions = { seek: 0, volume: 1 };
-    const stream = ytdl(args[0], { filter : 'audioonly' });
-    const dispatcher = client.guilds.get(guildId).voiceConnection.playStream(stream, streamOptions);
-    dispatchers[guildId] = dispatcher;
-  } else {
+  //possible usages
+  //.playmusic .playmusic loop .playmusic true .playmusic false
+  //.playmusic <youtubelink> .playmusic <youtubelink> loop playmusic <youtubelink> true playmusic <youtubelink> false
+  //check if argument loop/true/false is given
+  var loopArgumentCheck = /loop|true|false/;
+  var loopArgumentTrue = /loop|true/;
+  if (!args.length || loopArgumentCheck.test(args[0])) {
     //get files from directory specified in paths.json
     var files = fs.readdirSync(paths["music"]).filter((n) => n.endsWith(".mp3"));
-    createDispatcher(files, guildId);
+    //check if loop is requested
+    if (args.length && loopArgumentTrue.test(args[0])) {
+      createDispatcher(files, guildId, true);
+    } else {
+      createDispatcher(files, guildId)
+    }
+  }
+  else {
+    var youtubeLink = args[0];
+    try {   
+      if (args.length && loopArgumentTrue.test(youtubeLink)) {
+        createYoutubeDispatcher(youtubeLink, guildId, true);
+      } else {
+        createYoutubeDispatcher(youtubeLink, guildId);
+      }
+    } catch (err) { //invalid youtube link
+      console.log(err);
+    }
   }
 }
 
+function createYoutubeDispatcher(youtubeLink, guildId, loop=false) {
+  const streamOptions = { seek: 0, volume: 1 };  
+  const stream = ytdl(youtubeLink, { filter : 'audioonly' });
+  const dispatcher = client.guilds.get(guildId).voiceConnection.playStream(stream, streamOptions);
+  
+  dispatcher.on("start", () => {
+    console.log("started")
+  });
+  dispatcher.on("end", reason => {
+    console.log(reason);
+    if (reason == "stream") { //file done playing
+      //check if loop is requested
+      if (loop) {
+        createYoutubeDispatcher(guildId, loop);
+      }
+    } else if (reason == "stopMusic" || reason == "leavevoice") { //.stopmusic or .leavevoice
+    }
+    dispatchers.pop(guildId);
+  });
+  dispatcher.on("error", error => {
+    console.log(error);
+  });
+
+  dispatchers[guildId] = dispatcher;
+}
+
 //used by playMusic
-function createDispatcher(musicFiles, guildId) {
+function createDispatcher(musicFiles, guildId, loop=false) {
   //all files played, refresh files
   if (musicFiles.length == 0) {
     musicFiles = fs.readdirSync(paths["music"]).filter((n) => n.endsWith(".mp3"));
@@ -335,17 +449,19 @@ function createDispatcher(musicFiles, guildId) {
     dispatcher.on("end", reason => {
       console.log(reason);
       if (reason == "stream") { //file done playing
-        createDispatcher(musicFiles, guildId);
+        if (loop)
+          createDispatcher(musicFiles, guildId);
+      } else if (reason == "stopMusic" || reason == "leavevoice") { //.stopmusic or .leavevoice
       }
-      else if (reason == "stopMusic") { //.stopmusic
-         return
-      } else { 
-      }
+      dispatchers.pop(guildId);
     });
+
     dispatchers[guildId] = dispatcher;
   }
 }
+//#endregion helpFunctions
 
+//#region commands
 /*
 ============================
 commands
@@ -470,6 +586,9 @@ var commands = {
 
         //bot is in message.member.voicechannel
         if (channel) {
+          if (message.guild.id in dispatchers) {
+            dispatchers[message.guild.id].end("leavevoice");
+          }
           channel.leave();
           message.channel.send(`Disconned from ${channel}.`);
         } else {
@@ -479,17 +598,17 @@ var commands = {
     }
   },
   "playmusic": {
-    usage: config.prefix + "playmusic <link>",
-    description: "Makes bot play music (mp3 files in music folder) <link>.",
+    usage: config.prefix + "playmusic <link> (<loop or true|false>)",
+    description: "Makes bot play music (mp3 files in music folder) or from link.",
     permissionlevel: commandPermissions["playmusic"],
     minimumArgLength: 0,
     process: 
     function(message, args) {
       if (message.guild.voiceConnection) { //bot connected to a voice channel
         if (message.member.voiceChannel) { //message.author connected to a voice channel
-          if (message.member.voiceChannel == message.guild.voiceConnection.channel) { //bot and message.author in the same channel
-            message.channel.send(`Playing music in ${message.member.voiceChannel}.`);
+          if (message.member.voiceChannel == message.guild.voiceConnection.channel) { //bot and message.author in the same channel           
             playMusic(message.guild.id, args);
+            message.channel.send(`Playing music in ${message.member.voiceChannel}.`);
           } else {
             message.reply("You are not connected to the same voice channel as the bot.");
           }
@@ -540,66 +659,28 @@ function handleMessage(message) {
   //ignore bot user commands
   if(message.author.bot) return;
   
-    //ignore messages with wrong prefix
-    if(message.content.indexOf(config.prefix) !== 0) return;
-  
-    //split command and arguments
-    const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
-    const command = args.shift().toLowerCase();
+  //ignore messages with wrong prefix
+  if(message.content.indexOf(config.prefix) !== 0) return;
 
-    if (command in commands) {
-      //at least one group with enough permissions
-      if (checkPermissions(message.member.roles, command)) {
-        if (args.length >= commands[command].minimumArgLength)
-        {
-          commands[command].process(message, args);
-        } else {
-          message.channel.send(`Synthax error, *Usage:* \`${commands[command].usage}\``)
-        }
+  //split command and arguments
+  const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
+  const command = args.shift().toLowerCase();
+
+  if (command in commands) {
+    //at least one group with enough permissions
+    if (checkPermissions(message.member.roles, command)) {
+      if (args.length >= commands[command].minimumArgLength)
+      {
+        commands[command].process(message, args);
       } else {
-        //tell author which groups are allowed to use that command
-        message.channel.send(`Only \`${Object.keys(groups).filter((n) => groups[n] <= commandPermissions[command]).join(", ")}\` have the permissions to execute this command.`)
+        message.channel.send(`Synthax error, *Usage:* \`${commands[command].usage}\``)
       }
+    } else {
+      //tell author which groups are allowed to use that command
+      message.channel.send(`Only \`${Object.keys(groups).filter((n) => groups[n] <= commandPermissions[command]).join(", ")}\` have the permissions to execute this command.`)
     }
+  }
 }
-
-/*
-============================
-message events
-============================
-*/
-
-client.on('message', message  => {
-  handleMessage(message);
-});
-
-client.on('messageUpdate', (oldMessage, newMessage) => {
-  handleMessage(newMessage);
-});
-
-client.on('messageDelete', message => {
-  console.log('message deleted');
-});
-
-client.on('messageDeleteBulk', messages => {
-  console.log('message deleted bulk');
-});
-
-/*
-============================
-reaction events
-============================
-*/
-client.on('messageReactionAdd', (messageReaction, user) => {
-  console.log('message reaction added');
-});
-
-client.on('messageReactionRemove', (messageReaction, user) => {
-  console.log('message reaction removed');
-});
-
-client.on('messageReactionRemoveAll', message => {
-  console.log('message reaction removed all');
-});
+//#endregion commands
 
 client.login(config.token);
